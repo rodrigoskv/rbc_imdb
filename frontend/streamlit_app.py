@@ -1,5 +1,5 @@
 """
-Front-end Streamlit para filtrar/visualizar dados IMDB e testar RBC.
+Front-end Streamlit para recomendação de filmes baseada em RBC.
 
 Execute:
     streamlit run frontend/streamlit_app.py
@@ -18,20 +18,18 @@ from rbc.split import dividir_treino_teste
 from rbc.metrics import acuracia
 from rbc.domain import CasoFilme
 
-st.set_page_config(page_title="RBC IMDB — Visualização e Filtro", layout="wide")
+st.set_page_config(page_title="Sistema de Recomendação de Filmes - RBC", layout="wide")
 
-st.title("RBC IMDB — Visualizador e Filtro")
-st.write("Use a barra lateral para carregar o CSV, ajustar filtros e testar previsões.")
+st.title("🎬 Sistema de Recomendação de Filmes Baseado em RBC")
+st.write("Encontre filmes similares com base nas avaliações do IMDB e Metacritic.")
 
 # -------------------------
-# Leitura do CSV (upload ou caminho padrão)
+# Leitura do CSV
 # -------------------------
 CAMINHO_PADRAO = DEFAULT_DATASET_PATH
 
 def carregar_dataframe(caminho: str) -> pd.DataFrame:
-    # Usamos pandas aqui apenas para facilitar exibição/filtro na UI
     df = pd.read_csv(caminho)
-    # Garante presença das colunas essenciais (case-insensitive)
     cols_lower = {c.lower(): c for c in df.columns}
     faltantes = [c for c in ["genre", "imdb_rating", "meta_score"] if c not in cols_lower]
     if faltantes:
@@ -39,13 +37,12 @@ def carregar_dataframe(caminho: str) -> pd.DataFrame:
     return df
 
 with st.sidebar:
-    st.header("Dados")
+    st.header("⚙️ Configurações")
     arquivo_up = st.file_uploader("Envie o CSV do IMDB Top 1000", type=["csv"])
     usar_padrao = st.checkbox("Usar dataset incluído no projeto", value=os.path.exists(CAMINHO_PADRAO))
     caminho_csv = None
 
     if arquivo_up is not None:
-        # Salva temporariamente para reutilizar nas funções do pacote
         temp_path = "uploaded_imdb.csv"
         with open(temp_path, "wb") as f:
             f.write(arquivo_up.read())
@@ -53,13 +50,13 @@ with st.sidebar:
     elif usar_padrao and os.path.exists(CAMINHO_PADRAO):
         caminho_csv = CAMINHO_PADRAO
 
-    k_vizinhos = st.number_input("K (vizinhos para RBC)", min_value=1, max_value=50, value=1, step=1)
+    k_vizinhos = st.slider("Número de recomendações (K)", min_value=1, max_value=20, value=5, step=1)
 
 if not caminho_csv:
     st.info("Envie um CSV ou marque 'Usar arquivo padrão do ambiente' (se disponível).")
     st.stop()
 
-# Carrega casos (para RBC) e também um DataFrame (para UI)
+# Carrega casos
 try:
     casos = carregar_casos_de_csv(caminho_csv)
 except Exception as e:
@@ -68,109 +65,138 @@ except Exception as e:
 
 df = carregar_dataframe(caminho_csv)
 
-# Campos auxiliares
+# Identifica colunas
 col_titulo = next((c for c in df.columns if c.lower() in ["series_title", "title", "series title"]), None)
 col_genero = next((c for c in df.columns if c.lower() == "genre"), None)
 col_rating = next((c for c in df.columns if c.lower() in ["imdb_rating", "rating", "imdb rating"]), None)
 col_metascore = next((c for c in df.columns if c.lower() in ["meta_score", "metascore", "meta score"]), None)
 
-# Cria campo 'primeiro_genero' para filtros
-def primeiro_genero(g: Optional[str]) -> str:
-    if not isinstance(g, str) or not g:
-        return "Unknown"
-    return g.split(",")[0].strip()
+# -------------------------
+# Sistema de Recomendação
+# -------------------------
+st.header("🎯 Sistema de Recomendação")
 
-df["primeiro_genero"] = df[col_genero].apply(primeiro_genero) if col_genero else "Unknown"
+# Treina o RBC com todos os dados para recomendação
+rbc_recomendacao = RBC(k=int(k_vizinhos))
+rbc_recomendacao.ajustar(casos)
+
+# Método 1: Selecionar um filme existente para encontrar similares
+st.subheader("1. Encontrar filmes similares a um filme específico")
+
+# Criar lista de filmes para seleção
+if col_titulo:
+    filmes_disponiveis = df[col_titulo].dropna().unique().tolist()
+    filme_selecionado = st.selectbox("Selecione um filme:", sorted(filmes_disponiveis))
+    
+    if filme_selecionado:
+        # Encontrar o caso correspondente ao filme selecionado
+        caso_filme_selecionado = next((c for c in casos if c.titulo == filme_selecionado), None)
+        
+        if caso_filme_selecionado:
+            if st.button("🔍 Encontrar filmes similares"):
+                # Encontrar os vizinhos mais próximos (recomendações)
+                recomendacoes = rbc_recomendacao.vizinhos_mais_proximos(caso_filme_selecionado, top_n=int(k_vizinhos)+1)
+                
+                # Pular o primeiro resultado (que é o próprio filme)
+                recomendacoes = recomendacoes[1:]
+                
+                st.success(f"🎭 Recomendações baseadas em **{filme_selecionado}**:")
+                
+                # Mostrar recomendações em uma tabela formatada
+                dados_recomendacoes = []
+                for i, (distancia, caso) in enumerate(recomendacoes, 1):
+                    dados_recomendacoes.append({
+                        "Posição": i,
+                        "Filme": caso.titulo or "N/A",
+                        "Gênero": caso.label,
+                        "IMDB Rating": caso.imdb_rating or "N/A",
+                        "Meta Score": caso.meta_score or "N/A",
+                        "Ano": caso.ano or "N/A",
+                        "Similaridade": f"{100 - (distancia * 10):.1f}%"
+                    })
+                
+                df_recomendacoes = pd.DataFrame(dados_recomendacoes)
+                st.dataframe(df_recomendacoes, use_container_width=True, hide_index=True)
+
+# Método 2: Buscar por características específicas
+st.subheader("2. Encontrar filmes por preferências de avaliação")
+
+col1, col2 = st.columns(2)
+with col1:
+    rating_min = st.slider("IMDB Rating mínimo", 0.0, 10.0, 7.0, 0.1)
+with col2:
+    meta_min = st.slider("Meta Score mínimo", 0.0, 100.0, 60.0, 1.0)
+
+if st.button("🎯 Buscar filmes por avaliações"):
+    # Criar um caso fictício baseado nas preferências
+    caso_preferencias = CasoFilme(
+        parametros=[rating_min, meta_min/10.0], 
+        label="Preferências",
+        imdb_rating=rating_min, 
+        meta_score=meta_min
+    )
+    
+    # Encontrar filmes similares às preferências
+    recomendacoes = rbc_recomendacao.vizinhos_mais_proximos(caso_preferencias, top_n=int(k_vizinhos))
+    
+    st.success(f"🎭 Filmes recomendados baseados nas suas preferências:")
+    
+    dados_recomendacoes = []
+    for i, (distancia, caso) in enumerate(recomendacoes, 1):
+        dados_recomendacoes.append({
+            "Posição": i,
+            "Filme": caso.titulo or "N/A",
+            "Gênero": caso.label,
+            "IMDB Rating": caso.imdb_rating or "N/A",
+            "Meta Score": caso.meta_score or "N/A",
+            "Ano": caso.ano or "N/A",
+            "Adequação": f"{100 - (distancia * 10):.1f}%"
+        })
+    
+    df_recomendacoes = pd.DataFrame(dados_recomendacoes)
+    st.dataframe(df_recomendacoes, use_container_width=True, hide_index=True)
 
 # -------------------------
-# RBC — treino/teste
+# Visualização dos Dados
 # -------------------------
-treino, teste = dividir_treino_teste(casos, proporcao_treino=0.8, seed=42)
-rbc = RBC(k=int(k_vizinhos))
-rbc.ajustar(treino)
+st.header("📊 Visualização dos Dados")
 
-y_true = [c.label for c in teste]
-y_pred = rbc.prever_lote(teste)
-acc = acuracia(y_true, y_pred)
-
-st.subheader("Desempenho (avaliação rápida)")
-st.write(f"Acurácia com K={int(k_vizinhos)}: **{acc*100:.2f}%**")
-
-# -------------------------
-# Filtros (sidebar)
-# -------------------------
+# Filtros
 with st.sidebar:
-    st.header("Filtros")
-    generos = sorted(df["primeiro_genero"].dropna().unique().tolist()) if "primeiro_genero" in df else []
-    generos_sel = st.multiselect("Gêneros", options=generos, default=generos[:5] if generos else [])
+    st.header("🔍 Filtros de Visualização")
+    if col_genero:
+        generos = sorted(df[col_genero].dropna().unique().tolist())
+        generos_sel = st.multiselect("Filtrar por gênero:", options=generos, default=[])
 
-    min_rating = float(df[col_rating].min()) if col_rating else 0.0
-    max_rating = float(df[col_rating].max()) if col_rating else 10.0
-    faixa_rating = st.slider("IMDB_Rating", min_value=float(min_rating), max_value=float(max_rating),
-                             value=(float(min_rating), float(max_rating)))
-
-    min_meta = float(df[col_metascore].min()) if col_metascore else 0.0
-    max_meta = float(df[col_metascore].max()) if col_metascore else 100.0
-    faixa_meta = st.slider("Meta_score", min_value=float(min_meta), max_value=float(max_meta),
-                           value=(float(min_meta), float(max_meta)))
-
-# Aplica filtros
+# Aplicar filtros
 df_filtrado = df.copy()
-if generos_sel:
-    df_filtrado = df_filtrado[df_filtrado["primeiro_genero"].isin(generos_sel)]
-if col_rating:
-    df_filtrado = df_filtrado[(df_filtrado[col_rating] >= faixa_rating[0]) & (df_filtrado[col_rating] <= faixa_rating[1])]
-if col_metascore:
-    df_filtrado = df_filtrado[(df_filtrado[col_metascore] >= faixa_meta[0]) & (df_filtrado[col_metascore] <= faixa_meta[1])]
+if col_genero and generos_sel:
+    # Filtrar por gênero (usando contains para gêneros múltiplos)
+    mask = df_filtrado[col_genero].str.contains('|'.join(generos_sel), na=False)
+    df_filtrado = df_filtrado[mask]
 
-st.subheader("Tabela filtrada")
 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-# -------------------------
-# Visualização: Dispersão (IMDB_Rating vs Meta_score)
-# -------------------------
-st.subheader("Gráfico de dispersão (IMDB_Rating × Meta_score)")
+# Gráfico de dispersão
 if col_rating and col_metascore:
-    fig, ax = plt.subplots()
-    ax.scatter(df_filtrado[col_rating], df_filtrado[col_metascore])
-    ax.set_xlabel("IMDB_Rating")
-    ax.set_ylabel("Meta_score")
-    ax.set_title("Dispersão: Rating × Meta_score (filtrado)")
+    st.subheader("📈 Dispersão: IMDB Rating vs Meta Score")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Colorir por gênero se disponível
+    if col_genero and generos_sel:
+        for genero in generos_sel:
+            mask = df_filtrado[col_genero].str.contains(genero, na=False)
+            df_genero = df_filtrado[mask]
+            ax.scatter(df_genero[col_rating], df_genero[col_metascore], label=genero, alpha=0.7)
+        ax.legend()
+    else:
+        ax.scatter(df_filtrado[col_rating], df_filtrado[col_metascore], alpha=0.7)
+    
+    ax.set_xlabel("IMDB Rating")
+    ax.set_ylabel("Meta Score")
+    ax.set_title("Relação entre Avaliações do IMDB e Metacritic")
+    ax.grid(True, alpha=0.3)
     st.pyplot(fig)
-else:
-    st.info("Colunas IMDB_Rating e/ou Meta_score não encontradas para o gráfico.")
 
-# -------------------------
-# Teste de Previsão
-# -------------------------
-st.subheader("Teste uma previsão (gênero)")
-col1, col2, col3 = st.columns(3)
-with col1:
-    rating_in = st.number_input("IMDB_Rating (0..10)", min_value=0.0, max_value=10.0, value=8.0, step=0.1)
-with col2:
-    meta_in = st.number_input("Meta_score (0..100)", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
-with col3:
-    st.write(" ")
-
-if st.button("Prever gênero pelo RBC"):
-    # Constrói um CasoFilme 'sintético' para consulta
-    caso_novo = CasoFilme(parametros=[rating_in, meta_in/10.0], label="(desconhecido)",
-                          imdb_rating=rating_in, meta_score=meta_in)
-    previsto = rbc.prever(caso_novo)
-    st.success(f"Gênero previsto (primeiro gênero): **{previsto}**")
-
-    # Mostra vizinhos mais próximos
-    vizinhos = rbc.vizinhos_mais_proximos(caso_novo, top_n=5)
-    st.write("Vizinhos mais próximos (distância, gênero, título):")
-    linhas = []
-    for dist, caso in vizinhos:
-        linhas.append({
-            "dist": round(dist, 4),
-            "genero": caso.label,
-            "titulo": caso.titulo,
-            "rating": caso.imdb_rating,
-            "meta_score": caso.meta_score
-        })
-    st.dataframe(pd.DataFrame(linhas))
-
-st.caption("Dica: Ajuste **K** na barra lateral para ver como afeta a acurácia e as previsões.")
+st.sidebar.markdown("---")
+st.sidebar.info("💡 Dica: Use mais recomendações (K maior) para descobrir filmes mais diversos.")

@@ -1,48 +1,71 @@
 """
-Aplicação CLI para treinar/testar o RBC com a base IMDB Top 1000.
-
-- Usa /mnt/data/imdb_top_1000.csv se existir (ambiente ChatGPT).
-- Caso contrário, ajuste a constante `CAMINHO_CSV` para o seu arquivo local.
+Aplicação CLI para o sistema de recomendação de filmes com RBC.
 
 Execute:
     python app_cli.py
 """
 import os
 from rbc.data_io import carregar_casos_de_csv
-from rbc.split import dividir_treino_teste
 from rbc.rbc import RBC
-from rbc.metrics import acuracia
 from rbc.domain import CasoFilme
 
-# Tenta o caminho padrão do ambiente do ChatGPT; ajuste se necessário
 from rbc.config import DEFAULT_DATASET_PATH
 CAMINHO_PADRAO = DEFAULT_DATASET_PATH
-FALLBACK_CHATGPT = "/mnt/data/imdb_top_1000.csv"
-CAMINHO_CSV = CAMINHO_PADRAO if os.path.exists(CAMINHO_PADRAO) else (FALLBACK_CHATGPT if os.path.exists(FALLBACK_CHATGPT) else "imdb_top_1000.csv")
+
+def recomendar_filmes_similares(rbc: RBC, filme_alvo: str, casos: list, top_k: int = 5):
+    """Recomenda filmes similares a um filme específico"""
+    # Encontrar o filme alvo
+    caso_alvo = next((c for c in casos if c.titulo and c.titulo.lower() == filme_alvo.lower()), None)
+    
+    if not caso_alvo:
+        print(f"❌ Filme '{filme_alvo}' não encontrado na base de dados.")
+        return
+    
+    print(f"🎬 Buscando filmes similares a: {caso_alvo.titulo}")
+    print(f"   ⭐ IMDB Rating: {caso_alvo.imdb_rating}")
+    print(f"   🎯 Meta Score: {caso_alvo.meta_score}")
+    print(f"   🎭 Gênero: {caso_alvo.label}")
+    print()
+    
+    # Encontrar recomendações
+    recomendacoes = rbc.vizinhos_mais_proximos(caso_alvo, top_n=top_k+1)
+    
+    # Pular o primeiro (é o próprio filme)
+    recomendacoes = recomendacoes[1:]
+    
+    print("🎭 FILMES RECOMENDADOS:")
+    print("-" * 80)
+    for i, (distancia, caso) in enumerate(recomendacoes, 1):
+        similaridade = 100 - (distancia * 10)  # Converter distância em porcentagem de similaridade
+        print(f"{i}. {caso.titulo}")
+        print(f"   ⭐ Rating: {caso.imdb_rating} | 🎯 Meta: {caso.meta_score} | 🎭 Gênero: {caso.label}")
+        print(f"   📊 Similaridade: {similaridade:.1f}%")
+        print()
 
 def main():
-    print(f"Carregando CSV: {CAMINHO_CSV!r}")
-    casos = carregar_casos_de_csv(CAMINHO_CSV)
-    print(f"Total de casos carregados: {len(casos)}")
-
-    treino, teste = dividir_treino_teste(casos, proporcao_treino=0.8, seed=42)
-    print(f"Tamanho treino: {len(treino)} | Tamanho teste: {len(teste)}")
-
-    # RBC 1-NN (k=1) por padrão
-    rbc = RBC(k=1)
-    rbc.ajustar(treino)
-
-    # Avaliação simples
-    y_true = [c.label for c in teste]
-    y_pred = rbc.prever_lote(teste)
-    acc = acuracia(y_true, y_pred)
-    print(f"Acurácia (k=1): {acc * 100:.2f}%")
-
-    # Demonstração de previsões
-    print("\nExemplos de previsões:")
-    for i, caso in enumerate(teste[:5], start=1):
-        previsto = rbc.prever(caso)
-        print(f"{i}. Real: {caso.label:15s} | Previsto: {previsto:15s} | rating={caso.imdb_rating} | meta={caso.meta_score}")
+    print("🎬 SISTEMA DE RECOMENDAÇÃO DE FILMES - RBC")
+    print("=" * 50)
+    
+    print(f"📁 Carregando base de dados: {CAMINHO_PADRAO}")
+    casos = carregar_casos_de_csv(CAMINHO_PADRAO)
+    print(f"✅ Total de filmes carregados: {len(casos)}")
+    
+    # Criar e treinar o RBC
+    rbc = RBC(k=5)
+    rbc.ajustar(casos)
+    print("✅ Sistema de recomendação treinado e pronto!")
+    print()
+    
+    # Exemplo de recomendações
+    filmes_exemplo = ["The Godfather", "The Dark Knight", "Pulp Fiction", "Forrest Gump"]
+    
+    print("🎯 EXEMPLOS DE RECOMENDAÇÕES:")
+    print()
+    
+    for filme in filmes_exemplo:
+        if any(c.titulo and c.titulo.lower() == filme.lower() for c in casos):
+            recomendar_filmes_similares(rbc, filme, casos, top_k=3)
+            print()
 
 if __name__ == '__main__':
     main()

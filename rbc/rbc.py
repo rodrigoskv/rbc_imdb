@@ -85,3 +85,24 @@ class RBC:
         dists = [(self._distancia_euclidiana(c.parametros, caso_novo.parametros), c) for c in self._base]
         dists.sort(key=lambda x: x[0])
         return dists[:max(1, top_n)]
+
+    # ------------------------
+    # Recomendação (MÉTODO NOVO ADICIONADO)
+    # ------------------------
+    def recomendar_filmes_similares(self, filme_alvo: CasoFilme, top_k: int = 5) -> List[Tuple[float, CasoFilme]]:
+        """
+        Recomenda filmes similares ao filme alvo.
+        Retorna lista de (distância, caso) ordenada por similaridade.
+        """
+        vizinhos = self.vizinhos_mais_proximos(filme_alvo, top_n=top_k + 1)
+        
+        # Remover o próprio filme se estiver na base
+        vizinhos_filtrados = []
+        for dist, caso in vizinhos:
+            # Verificar se não é o mesmo filme (considerando título e ano)
+            if (caso.titulo != filme_alvo.titulo or 
+                caso.ano != filme_alvo.ano or 
+                abs(dist) > 0.001):  # Margem de erro para distância zero
+                vizinhos_filtrados.append((dist, caso))
+        
+        return vizinhos_filtrados[:top_k]
