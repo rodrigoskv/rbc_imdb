@@ -7,8 +7,7 @@ def dividir_treino_teste(itens: List[T], proporcao_treino: float = 0.8, seed: in
     """
     Divide a lista em treino/teste de forma reprodutível.
     """
-    if not 0.0 < proporcao_treino < 1.0:
-        raise ValueError("proporcao_treino deve estar entre 0 e 1 (exclusivo).")
+    
     rnd = random.Random(seed)
     copia = list(itens)
     rnd.shuffle(copia)
