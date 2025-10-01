@@ -3,12 +3,6 @@ from typing import List, Optional
 
 @dataclass
 class CasoFilme:
-    """
-    Representa um 'caso' na base de filmes.
-    - parametros: vetor numérico usado no RBC (ex.: [rating, metascore/10])
-    - label: rótulo alvo (neste projeto, o primeiro gênero)
-    - titulo, ano, genero_original, imdb_rating, meta_score: metadados úteis
-    """
     parametros: List[float]
     label: str
     titulo: Optional[str] = None

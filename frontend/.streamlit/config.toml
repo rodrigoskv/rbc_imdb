@@ -1,0 +1,73 @@
+[theme]
+base = "light"
+primaryColor = "#f5c518"                # IMDB yellow
+backgroundColor = "#000000"             # Black
+secondaryBackgroundColor = "#1a1a1a"    # Dark gray
+textColor = "#ffffff"                   # White
+redColor = "#d7263d"
+orangeColor = "#f5c518"                 # IMDB yellow
+yellowColor = "#f5c518"                 # IMDB yellow
+blueColor = "#0073e6"
+greenColor = "#21c354"
+violetColor = "#803df5"
+grayColor = "#a3a8b8"
+
+redBackgroundColor = "#d7263d1a"
+orangeBackgroundColor = "#f5c5181a"
+yellowBackgroundColor = "#f5c5181a"
+blueBackgroundColor = "#0073e61a"
+greenBackgroundColor = "#21c3541a"
+violetBackgroundColor = "#803df51a"
+grayBackgroundColor = "#a3a8b81a"
+
+redTextColor = "#d7263d"
+orangeTextColor = "#f5c518"
+yellowTextColor = "#f5c518"
+blueTextColor = "#0073e6"
+greenTextColor = "#21c354"
+violetTextColor = "#803df5"
+grayTextColor = "#a3a8b8"
+
+linkColor = "#f5c518"
+linkUnderline = true
+codeBackgroundColor = "#1a1a1a"
+font = "sans-serif"
+baseFontSize = 16
+baseFontWeight = 400
+headingFont = "sans-serif"
+headingFontSizes = ["2.75rem", "2.25rem", "1.75rem", "1.5rem", "1.25rem", "1rem"]
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+codeFont = "monospace"
+codeFontSize = "0.875rem"
+codeFontWeight = 400
+baseRadius = "small"
+buttonRadius = "small"
+borderColor = "#f5c518"
+dataframeBorderColor = "#f5c518"
+dataframeHeaderBackgroundColor = "#1a1a1a"
+showWidgetBorder = true
+showSidebarBorder = false
+
+chartCategoricalColors = [
+    "#f5c518", # IMDB yellow
+    "#000000", # Black
+    "#ffffff", # White
+    "#a3a8b8", # Gray
+    "#0073e6", # Blue
+    "#d7263d", # Red
+    "#21c354", # Green
+    "#803df5", # Violet
+]
+
+chartSequentialColors = [
+    "#fffbe6",
+    "#fff3b3",
+    "#ffe680",
+    "#ffd94d",
+    "#f5c518",
+    "#e6b800",
+    "#bfa600",
+    "#998c00",
+    "#736600",
+    "#4d4000"
+]
